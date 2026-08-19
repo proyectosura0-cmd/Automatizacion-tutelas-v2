@@ -13,12 +13,12 @@ from openpyxl.utils import get_column_letter
 from database import get_db
 import models
 from dotenv import load_dotenv
-from anthropic import Anthropic
+from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
 
 load_dotenv()
-client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 router = APIRouter(prefix="/api/athento", tags=["athento"])
 
@@ -1206,13 +1206,13 @@ MODELOS DISPONIBLES:
 Responde SOLO con el nombre del modelo, sin explicación. Ej: "Medicamento Importado"
 Si no estás seguro, elige el más probable."""
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             max_tokens=100,
             messages=[{"role": "user", "content": prompt}]
         )
 
-        modelo_sugerido = response.content[0].text.strip()
+        modelo_sugerido = response.choices[0].message.content.strip()
 
         # Validar que el modelo sugerido esté en la lista
         if modelo_sugerido not in modelos_disponibles:
@@ -1270,13 +1270,13 @@ INSTRUCCIONES:
 
 CONCEPTO ADAPTADO:"""
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}]
         )
 
-        concepto_adaptado = response.content[0].text.strip()
+        concepto_adaptado = response.choices[0].message.content.strip()
 
         return {
             "concepto_adaptado": concepto_adaptado,
@@ -1364,8 +1364,8 @@ def extraer_tutela(uuid: str, db: Session = Depends(get_db)):
         # Usar Claude para detectar modelo basado en el contenido
         if not datos["modelo_sugerido"]:
             try:
-                response = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
                     max_tokens=50,
                     messages=[{
                         "role": "user",
@@ -1377,7 +1377,7 @@ Responde SOLO con: Medicamento Importado | Transporte | Acceso a Citas | No INVI
 """
                     }]
                 )
-                modelo = response.content[0].text.strip()
+                modelo = response.choices[0].message.content.strip()
                 if "Medicamento" in modelo or "medicamento" in modelo:
                     datos["modelo_sugerido"] = "Medicamento Importado"
                 elif "Transporte" in modelo or "transporte" in modelo:
