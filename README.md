@@ -83,3 +83,4 @@ tutelas-sura/
   `*** BORRADOR — PARA REVISIÓN DEL ABOGADO RESPONSABLE — NO RADICAR ***`
 - Los archivos generados se guardan en `./contestaciones/` y son descargables
   desde la interfaz o directamente vía `/api/tutelas/descargar/{nombre}`.
+# Forced update Thu Aug 20 12:35:25 HPS 2026
