@@ -963,44 +963,72 @@ def listar_todos_conceptos(db: Session = Depends(get_db)):
 
 
 # ─── GENERACIÓN DE PLANTILLAS ───────────────────────────────────────────────
-def _reemplazar_en_odt_con_lxml(plantilla_bytes: bytes, reemplazos: dict) -> bytes:
+def _reemplazar_en_docx(plantilla_bytes: bytes, reemplazos: dict) -> bytes:
     """
-    Reemplaza placeholders en DOCX de manera robusta.
-    Procesa word/document.xml (estructura Word, no ODF).
+    Reemplaza placeholders en DOCX de manera robusta usando el método de word_generator.
+    Procesa párrafo por párrafo para manejar fragmentación de Word.
     """
     import zipfile
     import io
     import re
 
+    def _escape_xml(s: str) -> str:
+        return (s
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&apos;"))
+
+    def _procesar_xml(xml_str: str, mapa: dict) -> str:
+        """Recorre cada <w:p>, reemplaza marcadores, reconstruye."""
+        def procesar_parrafo(m: re.Match) -> str:
+            p_xml = m.group(0)
+            t_matches = list(re.finditer(r'<w:t(?:\s[^>]*)?>([^<]*)</w:t>', p_xml))
+            if not t_matches:
+                return p_xml
+
+            texto_completo = "".join(tm.group(1) for tm in t_matches)
+            if not any(k in texto_completo for k in mapa):
+                return p_xml
+
+            texto_final = texto_completo
+            for marcador, valor in mapa.items():
+                if marcador in texto_final:
+                    repl = _escape_xml(str(valor)) if valor else _escape_xml(marcador)
+                    texto_final = texto_final.replace(marcador, repl)
+
+            first = [True]
+            def replace_wt(mt: re.Match) -> str:
+                if first[0]:
+                    first[0] = False
+                    return f'<w:t xml:space="preserve">{texto_final}</w:t>'
+                return "<w:t></w:t>"
+
+            return re.sub(r'<w:t(?:\s[^>]*)?>([^<]*)</w:t>', replace_wt, p_xml)
+
+        xml_str = re.sub(
+            r'<w:p(?:\s[^>]*)?>.*?</w:p>',
+            procesar_parrafo,
+            xml_str,
+            flags=re.DOTALL,
+        )
+        return xml_str
+
     with zipfile.ZipFile(io.BytesIO(plantilla_bytes), 'r') as zip_read:
-        # Leer word/document.xml para archivos .docx
         try:
             content_xml_bytes = zip_read.read('word/document.xml')
         except KeyError:
-            # Fallback a content.xml si es ODF
             content_xml_bytes = zip_read.read('content.xml')
 
         content_xml_str = content_xml_bytes.decode('utf-8')
+        content_xml_str = _procesar_xml(content_xml_str, reemplazos)
 
-        # Hacer reemplazos de texto directo
-        for placeholder, valor in reemplazos.items():
-            content_xml_str = content_xml_str.replace(placeholder, valor)
-
-        # Remover tags internos en placeholders fragmentados
-        content_xml_str = re.sub(r'(\[)([^<>\]]*)</[^>]*?>([^<>\]]*?)(\])', r'\1\2\3\4', content_xml_str)
-
-        # Reintentar reemplazos
-        for placeholder, valor in reemplazos.items():
-            content_xml_str = content_xml_str.replace(placeholder, valor)
-
-        # Recrear el ZIP con el contenido modificado
         output = io.BytesIO()
         with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as zip_write:
             for item in zip_read.infolist():
-                if item.filename == 'word/document.xml':
-                    zip_write.writestr('word/document.xml', content_xml_str.encode('utf-8'))
-                elif item.filename == 'content.xml':
-                    zip_write.writestr('content.xml', content_xml_str.encode('utf-8'))
+                if item.filename in ('word/document.xml', 'content.xml'):
+                    zip_write.writestr(item.filename, content_xml_str.encode('utf-8'))
                 else:
                     zip_write.writestr(item, zip_read.read(item.filename))
 
@@ -1070,7 +1098,7 @@ def generar_plantilla_con_concepto(
 
     # 4. Reemplazar en el ODT
     try:
-        contenido_modificado = _reemplazar_en_odt_con_lxml(plantilla_contenido, reemplazos)
+        contenido_modificado = _reemplazar_en_docx(plantilla_contenido, reemplazos)
         print(f"DEBUG: ODT procesado exitosamente")
     except Exception as e:
         print(f"ERROR procesando ODT: {str(e)}")
@@ -1158,7 +1186,7 @@ def generar_plantilla(
 
     # 4. Reemplazar en el ODT
     try:
-        contenido_modificado = _reemplazar_en_odt_con_lxml(plantilla_contenido, reemplazos)
+        contenido_modificado = _reemplazar_en_docx(plantilla_contenido, reemplazos)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error procesando ODT: {str(e)}")
 
