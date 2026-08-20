@@ -239,7 +239,8 @@ def generar_documento(datos: dict) -> tuple[str, str, int]:
     accionante = re.sub(r"\s+", "_", (datos.get("accionante", "SIN") or "SIN").upper())[:20]
     accionante = re.sub(r"[^A-Za-z0-9_]", "", accionante)
     fecha_hoy = date.today().strftime("%Y%m%d")
-    nombre_archivo = f"Contestacion_{rs}_{accionante}_{fecha_hoy}.docx"
+    # FORZAR: Generar SIEMPRE como .docx (NUNCA .odt)
+    nombre_archivo = f"Contestacion_{rs}_{accionante}_{fecha_hoy}_DOCX.docx"
 
     CONTESTACIONES_DIR.mkdir(parents=True, exist_ok=True)
     ruta_salida = CONTESTACIONES_DIR / nombre_archivo
