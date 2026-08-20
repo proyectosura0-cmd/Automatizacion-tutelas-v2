@@ -1065,11 +1065,11 @@ def generar_plantilla_con_concepto(
         raise HTTPException(status_code=500, detail=f"Error procesando ODT: {str(e)}")
 
     # 5. Retornar documento generado
-    nombre_archivo = f"Contestacion_{req.modelo}_{req.radicado or 'sin_radicado'}.odt"
+    nombre_archivo = f"Contestacion_{req.modelo}_{req.radicado or 'sin_radicado'}.docx"
 
     return StreamingResponse(
         iter([contenido_modificado]),
-        media_type="application/vnd.oasis.opendocument.text",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"}
     )
 
@@ -1151,11 +1151,11 @@ def generar_plantilla(
         raise HTTPException(status_code=500, detail=f"Error procesando ODT: {str(e)}")
 
     # 5. Retornar documento generado
-    nombre_archivo = f"Contestacion_{modelo}_{radicado or 'sin_radicado'}.odt"
+    nombre_archivo = f"Contestacion_{modelo}_{radicado or 'sin_radicado'}.docx"
 
     return StreamingResponse(
         iter([contenido_modificado]),
-        media_type="application/vnd.oasis.opendocument.text",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"}
     )
 
