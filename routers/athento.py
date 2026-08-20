@@ -1025,7 +1025,7 @@ def generar_plantilla_con_concepto(
     print(f"DEBUG: Radicado: {req.radicado}")
 
     # 2. Cargar plantilla principal
-    plantilla_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Modelo Principal", "MODELO PRINCIPAL.docx")
+    plantilla_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "plantillas", "MODELO_PRINCIPAL.docx")
 
     if not os.path.exists(plantilla_path):
         raise HTTPException(status_code=500, detail=f"Plantilla no encontrada")
@@ -1115,7 +1115,7 @@ def generar_plantilla(
         raise HTTPException(status_code=404, detail=f"No hay concepto pre-establecido para {modelo}")
 
     # 2. Cargar plantilla principal
-    plantilla_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Modelo Principal", "MODELO PRINCIPAL.docx")
+    plantilla_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "plantillas", "MODELO_PRINCIPAL.docx")
 
     if not os.path.exists(plantilla_path):
         raise HTTPException(status_code=500, detail=f"Plantilla no encontrada")
