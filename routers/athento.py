@@ -965,30 +965,31 @@ def listar_todos_conceptos(db: Session = Depends(get_db)):
 # ─── GENERACIÓN DE PLANTILLAS ───────────────────────────────────────────────
 def _reemplazar_en_odt_con_lxml(plantilla_bytes: bytes, reemplazos: dict) -> bytes:
     """
-    Reemplaza placeholders en ODT de manera robusta.
-    Primero intenta reemplazos simples, luego reconstruye si es necesario.
+    Reemplaza placeholders en DOCX de manera robusta.
+    Procesa word/document.xml (estructura Word, no ODF).
     """
     import zipfile
     import io
-    from lxml import etree
     import re
 
     with zipfile.ZipFile(io.BytesIO(plantilla_bytes), 'r') as zip_read:
-        # Leer content.xml como texto primero
-        content_xml_bytes = zip_read.read('content.xml')
+        # Leer word/document.xml para archivos .docx
+        try:
+            content_xml_bytes = zip_read.read('word/document.xml')
+        except KeyError:
+            # Fallback a content.xml si es ODF
+            content_xml_bytes = zip_read.read('content.xml')
+
         content_xml_str = content_xml_bytes.decode('utf-8')
 
-        # Hacer reemplazos de texto directo primero
-        # Esto funciona para placeholders que estén en un solo elemento
+        # Hacer reemplazos de texto directo
         for placeholder, valor in reemplazos.items():
             content_xml_str = content_xml_str.replace(placeholder, valor)
 
-        # Ahora si alguno no se reemplazó (placeholder dividido),
-        # intentar remover los tags internos primero
-        # Buscar patrones como [CONCEPTO<tag>TECNICO] y convertirlos a [CONCEPTOTECNICO]
+        # Remover tags internos en placeholders fragmentados
         content_xml_str = re.sub(r'(\[)([^<>\]]*)</[^>]*?>([^<>\]]*?)(\])', r'\1\2\3\4', content_xml_str)
 
-        # Intentar nuevamente los reemplazos
+        # Reintentar reemplazos
         for placeholder, valor in reemplazos.items():
             content_xml_str = content_xml_str.replace(placeholder, valor)
 
@@ -996,7 +997,9 @@ def _reemplazar_en_odt_con_lxml(plantilla_bytes: bytes, reemplazos: dict) -> byt
         output = io.BytesIO()
         with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as zip_write:
             for item in zip_read.infolist():
-                if item.filename == 'content.xml':
+                if item.filename == 'word/document.xml':
+                    zip_write.writestr('word/document.xml', content_xml_str.encode('utf-8'))
+                elif item.filename == 'content.xml':
                     zip_write.writestr('content.xml', content_xml_str.encode('utf-8'))
                 else:
                     zip_write.writestr(item, zip_read.read(item.filename))
