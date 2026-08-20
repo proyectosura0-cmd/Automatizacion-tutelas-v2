@@ -965,75 +965,35 @@ def listar_todos_conceptos(db: Session = Depends(get_db)):
 # ─── GENERACIÓN DE PLANTILLAS ───────────────────────────────────────────────
 def _reemplazar_en_docx(plantilla_bytes: bytes, reemplazos: dict) -> bytes:
     """
-    Reemplaza placeholders en DOCX de manera robusta usando el método de word_generator.
-    Procesa párrafo por párrafo para manejar fragmentación de Word.
+    Reemplaza placeholders en DOCX usando python-docx (seguro, no daña XML).
     """
-    import zipfile
+    from docx import Document
     import io
-    import re
 
-    def _escape_xml(s: str) -> str:
-        return (s
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-            .replace("'", "&apos;"))
+    doc = Document(io.BytesIO(plantilla_bytes))
 
-    def _procesar_xml(xml_str: str, mapa: dict) -> str:
-        """Recorre cada <w:p>, reemplaza marcadores, reconstruye."""
-        def procesar_parrafo(m: re.Match) -> str:
-            p_xml = m.group(0)
-            t_matches = list(re.finditer(r'<w:t(?:\s[^>]*)?>([^<]*)</w:t>', p_xml))
-            if not t_matches:
-                return p_xml
+    # Reemplazar en párrafos
+    for paragraph in doc.paragraphs:
+        for run in paragraph.runs:
+            for marcador, valor in reemplazos.items():
+                if marcador in run.text:
+                    run.text = run.text.replace(marcador, str(valor) if valor else marcador)
 
-            texto_completo = "".join(tm.group(1) for tm in t_matches)
-            if not any(k in texto_completo for k in mapa):
-                return p_xml
+    # Reemplazar en tablas
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        for marcador, valor in reemplazos.items():
+                            if marcador in run.text:
+                                run.text = run.text.replace(marcador, str(valor) if valor else marcador)
 
-            texto_final = texto_completo
-            for marcador, valor in mapa.items():
-                if marcador in texto_final:
-                    repl = _escape_xml(str(valor)) if valor else _escape_xml(marcador)
-                    texto_final = texto_final.replace(marcador, repl)
-
-            first = [True]
-            def replace_wt(mt: re.Match) -> str:
-                if first[0]:
-                    first[0] = False
-                    return f'<w:t xml:space="preserve">{texto_final}</w:t>'
-                return "<w:t></w:t>"
-
-            return re.sub(r'<w:t(?:\s[^>]*)?>([^<]*)</w:t>', replace_wt, p_xml)
-
-        xml_str = re.sub(
-            r'<w:p(?:\s[^>]*)?>.*?</w:p>',
-            procesar_parrafo,
-            xml_str,
-            flags=re.DOTALL,
-        )
-        return xml_str
-
-    with zipfile.ZipFile(io.BytesIO(plantilla_bytes), 'r') as zip_read:
-        try:
-            content_xml_bytes = zip_read.read('word/document.xml')
-        except KeyError:
-            content_xml_bytes = zip_read.read('content.xml')
-
-        content_xml_str = content_xml_bytes.decode('utf-8')
-        content_xml_str = _procesar_xml(content_xml_str, reemplazos)
-
-        output = io.BytesIO()
-        with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as zip_write:
-            for item in zip_read.infolist():
-                if item.filename in ('word/document.xml', 'content.xml'):
-                    zip_write.writestr(item.filename, content_xml_str.encode('utf-8'))
-                else:
-                    zip_write.writestr(item, zip_read.read(item.filename))
-
-        output.seek(0)
-        return output.getvalue()
+    # Guardar a bytes
+    output = io.BytesIO()
+    doc.save(output)
+    output.seek(0)
+    return output.getvalue()
 
 
 class GenerarPlantillaRequest(BaseModel):
