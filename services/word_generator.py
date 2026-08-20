@@ -21,6 +21,7 @@ PLANTILLAS_DIR = BASE_DIR / "plantillas"
 CONTESTACIONES_DIR = BASE_DIR / "contestaciones"
 
 NOMBRE_PLANTILLA = {
+    "Modelo Principal":              "MODELO_PRINCIPAL.docx",
     "Transporte":                    "Transporte.docx",
     "Medicamento Importado":         "Medicamento_Importado.docx",
     "No INVIMA":                     "No_INVIMA_2025.docx",
