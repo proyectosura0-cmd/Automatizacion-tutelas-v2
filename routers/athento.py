@@ -1006,9 +1006,8 @@ class GenerarPlantillaRequest(BaseModel):
     cedula_representante: str = ""
 
 
-# DESHABILITADO: Usar /api/tutelas/generar en su lugar
-# @router.post("/generar-plantilla-con-concepto")
-def generar_plantilla_con_concepto_DISABLED(
+@router.post("/generar-plantilla-con-concepto")
+def generar_plantilla_con_concepto(
     req: GenerarPlantillaRequest,
     db: Session = Depends(get_db),
 ):
@@ -1075,38 +1074,21 @@ def generar_plantilla_con_concepto_DISABLED(
     )
 
 
-# DESHABILITADO: Usar /api/tutelas/generar en su lugar
-# @router.post("/generar-plantilla/{modelo}")
-def generar_plantilla_DISABLED(
+@router.post("/generar-plantilla/{modelo}")
+def generar_plantilla(
     modelo: str,
     concepto_id: int | None = None,
     radicado: str = "",
     accionante: str = "",
     db: Session = Depends(get_db),
 ):
-    """
-    Genera un documento ODT desde la plantilla principal reemplazando placeholders
-    con concepto técnico y otros datos.
+    """Usa word_generator.py - método probado y funcional"""
+    from services.word_generator import generar_documento
 
-    Placeholders reemplazados:
-    - [CONCEPTO TECNICO]
-    - [ACCIONANTE]
-    - [RADICADO]
-    - [JUZGADO]
-    - [REPRESENTANTE_LEGAL]
-    - [CEDULA_REPRESENTANTE]
-    - [NUMERO_RS]
-    - [FECHA_CONTESTACION]
-    """
-    import os
-    from datetime import datetime
-
-    # 1. Obtener concepto de BD
+    # Obtener concepto
     if concepto_id:
         concepto = db.query(models.ConceptoPreestablecido).filter_by(
-            id=concepto_id,
-            activo=True
-        ).first()
+            id=concepto_id, activo=True).first()
     else:
         concepto = db.query(models.ConceptoPreestablecido).filter(
             models.ConceptoPreestablecido.modelo == modelo,
@@ -1114,52 +1096,30 @@ def generar_plantilla_DISABLED(
         ).order_by(models.ConceptoPreestablecido.orden).first()
 
     if not concepto:
-        raise HTTPException(status_code=404, detail=f"No hay concepto pre-establecido para {modelo}")
+        raise HTTPException(status_code=404, detail=f"No hay concepto para {modelo}")
 
-    # 2. Cargar plantilla principal
-    plantilla_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "plantillas", "MODELO_PRINCIPAL.docx")
-
-    if not os.path.exists(plantilla_path):
-        raise HTTPException(status_code=500, detail=f"Plantilla no encontrada")
-
-    try:
-        with open(plantilla_path, 'rb') as f:
-            plantilla_contenido = f.read()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error leyendo plantilla: {str(e)}")
-
-    # 3. Preparar reemplazos
-    fecha_hoy = datetime.now().strftime("%d de %B de %Y").replace(
-        "January", "enero").replace("February", "febrero").replace("March", "marzo").replace(
-        "April", "abril").replace("May", "mayo").replace("June", "junio").replace(
-        "July", "julio").replace("August", "agosto").replace("September", "septiembre").replace(
-        "October", "octubre").replace("November", "noviembre").replace("December", "diciembre")
-
-    reemplazos = {
-        "[CONCEPTO TECNICO]": concepto.texto_concepto,
-        "[ACCIONANTE]": accionante,
-        "[RADICADO]": radicado,
-        "[JUZGADO]": "",  # Se podría agregar si viene en el request
-        "[REPRESENTANTE_LEGAL]": "",
-        "[CEDULA_REPRESENTANTE]": "",
-        "[NUMERO_RS]": "",
-        "[FECHA_CONTESTACION]": fecha_hoy,
+    # Usar word_generator que funciona
+    datos = {
+        "tipo_modelo": modelo,
+        "concepto_tecnico": concepto.texto_concepto,
+        "accionante": accionante.upper(),
+        "radicado": radicado,
+        "numero_rs": "",
+        "fecha_contestacion": "",
     }
 
-    # 4. Reemplazar en el ODT
     try:
-        contenido_modificado = _reemplazar_en_docx(plantilla_contenido, reemplazos)
+        nombre_archivo, ruta, _ = generar_documento(datos)
+        with open(ruta, 'rb') as f:
+            contenido = f.read()
+
+        return FileResponse(
+            path=ruta,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=nombre_archivo,
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error procesando ODT: {str(e)}")
-
-    # 5. Retornar documento generado
-    nombre_archivo = f"Contestacion_{modelo}_{radicado or 'sin_radicado'}.docx"
-
-    return StreamingResponse(
-        iter([contenido_modificado]),
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"}
-    )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── AGENTE IA PARA SUGERIR MODELO ──────────────────────────────────────────
