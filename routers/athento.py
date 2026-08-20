@@ -1006,8 +1006,9 @@ class GenerarPlantillaRequest(BaseModel):
     cedula_representante: str = ""
 
 
-@router.post("/generar-plantilla-con-concepto")
-def generar_plantilla_con_concepto(
+# DESHABILITADO: Usar /api/tutelas/generar en su lugar
+# @router.post("/generar-plantilla-con-concepto")
+def generar_plantilla_con_concepto_DISABLED(
     req: GenerarPlantillaRequest,
     db: Session = Depends(get_db),
 ):
@@ -1074,8 +1075,9 @@ def generar_plantilla_con_concepto(
     )
 
 
-@router.post("/generar-plantilla/{modelo}")
-def generar_plantilla(
+# DESHABILITADO: Usar /api/tutelas/generar en su lugar
+# @router.post("/generar-plantilla/{modelo}")
+def generar_plantilla_DISABLED(
     modelo: str,
     concepto_id: int | None = None,
     radicado: str = "",
