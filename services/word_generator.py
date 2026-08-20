@@ -196,7 +196,11 @@ def generar_documento(datos: dict) -> tuple[str, str, int]:
     Retorna (nombre_archivo, ruta_completa, total_reemplazos).
     """
     tipo_modelo = datos.get("tipo_modelo", "")
-    nombre_plantilla = NOMBRE_PLANTILLA.get(tipo_modelo)
+    # TEMPORAL: Usar Medicamento_Importado.docx para prueba
+    if tipo_modelo == "Modelo Principal":
+        nombre_plantilla = "Medicamento_Importado.docx"
+    else:
+        nombre_plantilla = NOMBRE_PLANTILLA.get(tipo_modelo)
     if not nombre_plantilla:
         raise ValueError(f"Tipo de modelo no reconocido: '{tipo_modelo}'")
 
