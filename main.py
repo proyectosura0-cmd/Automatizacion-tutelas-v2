@@ -24,7 +24,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Automatizador de Tutelas — EPS SURA",
     description="API para generación automática de contestaciones de acciones de tutela.",
-    version="1.0.0",
+    version="1.0.1",
 )
 
 app.add_middleware(
