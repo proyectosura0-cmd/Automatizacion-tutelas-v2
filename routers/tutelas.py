@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 from services.word_generator import (
     generar_documento, escanear_marcadores,
-    PLANTILLAS_DIR, CONTESTACIONES_DIR, NOMBRE_PLANTILLA,
+    PLANTILLAS_DIR, CONTESTACIONES_DIR, NOMBRE_PLANTILLA, CONCEPTOS_DIR,
 )
 
 router = APIRouter(prefix="/api/tutelas", tags=["tutelas"])
@@ -16,7 +16,8 @@ class DatosTutela(BaseModel):
     # Campos del caso
     fecha_contestacion: Optional[str] = ""
     numero_rs: Optional[str] = ""
-    tipo_modelo: Optional[str] = ""
+    concepto_nombre: Optional[str] = ""
+    concepto_texto: Optional[str] = ""
     # Juzgado
     juzgado: Optional[str] = ""
     ciudad_departamento: Optional[str] = ""
@@ -183,3 +184,14 @@ async def escanear_plantilla(nombre_archivo: str):
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"archivo": nombre_archivo, "marcadores": marcadores, "total": len(marcadores)}
+
+
+@router.get("/conceptos")
+async def listar_conceptos():
+    """Lista todos los conceptos jurídicos disponibles."""
+    CONCEPTOS_DIR.mkdir(parents=True, exist_ok=True)
+    conceptos = [f.stem for f in CONCEPTOS_DIR.glob("*.docx")]
+    return {
+        "conceptos": sorted(conceptos),
+        "total": len(conceptos),
+    }
