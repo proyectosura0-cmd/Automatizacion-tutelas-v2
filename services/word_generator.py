@@ -20,14 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PLANTILLAS_DIR = BASE_DIR / "plantillas"
 CONTESTACIONES_DIR = BASE_DIR / "contestaciones"
 
-NOMBRE_PLANTILLA = {
-    "Transporte":                    "Transporte.odt",
-    "Medicamento Importado":         "Medicamento_Importado.docx",
-    "No INVIMA":                     "No_INVIMA_2025.docx",
-    "No PBS / Presupuestos Maximos": "NO_PBS_Presup_Max.docx",
-    "Silla de Ruedas":               "Silla_de_Ruedas.docx",
-    "Carencia Actual de Objeto":     "Carencia_Actual_de_Objeto.docx",
-}
+NOMBRE_PLANTILLA = "MODELO_PRINCIPAL.odt"
 
 # ─────────────────────────────────────────────
 # Helpers XML
@@ -201,22 +194,17 @@ def _construir_mapa(datos: dict) -> dict:
 
 def generar_documento(datos: dict) -> tuple[str, str, int]:
     """
-    Genera el .odt o .docx de contestación.
+    Genera el .odt de contestación usando MODELO_PRINCIPAL.
     Retorna (nombre_archivo, ruta_completa, total_reemplazos).
     """
-    tipo_modelo = datos.get("tipo_modelo", "")
-    nombre_plantilla = NOMBRE_PLANTILLA.get(tipo_modelo)
-    if not nombre_plantilla:
-        raise ValueError(f"Tipo de modelo no reconocido: '{tipo_modelo}'")
-
-    ruta_plantilla = PLANTILLAS_DIR / nombre_plantilla
+    ruta_plantilla = PLANTILLAS_DIR / NOMBRE_PLANTILLA
     if not ruta_plantilla.exists():
         raise FileNotFoundError(
             f"Plantilla no encontrada: {ruta_plantilla}. "
             "Súbala desde la pestaña Plantillas de la interfaz."
         )
 
-    es_odf = nombre_plantilla.endswith(".odt")
+    es_odf = True  # MODELO_PRINCIPAL es siempre ODF
     mapa = _construir_mapa(datos)
     zip_in = BytesIO(ruta_plantilla.read_bytes())
     zip_out_buf = BytesIO()
@@ -245,8 +233,7 @@ def generar_documento(datos: dict) -> tuple[str, str, int]:
     accionante = re.sub(r"\s+", "_", (datos.get("accionante", "SIN") or "SIN").upper())[:20]
     accionante = re.sub(r"[^A-Za-z0-9_]", "", accionante)
     fecha_hoy = date.today().strftime("%Y%m%d")
-    ext = "odt" if es_odf else "docx"
-    nombre_archivo = f"Contestacion_{rs}_{accionante}_{fecha_hoy}.{ext}"
+    nombre_archivo = f"Contestacion_{rs}_{accionante}_{fecha_hoy}.odt"
 
     CONTESTACIONES_DIR.mkdir(parents=True, exist_ok=True)
     ruta_salida = CONTESTACIONES_DIR / nombre_archivo
