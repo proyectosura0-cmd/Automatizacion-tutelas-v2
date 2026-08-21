@@ -963,38 +963,6 @@ def listar_todos_conceptos(db: Session = Depends(get_db)):
 
 
 # ─── GENERACIÓN DE PLANTILLAS ───────────────────────────────────────────────
-def _reemplazar_en_docx(plantilla_bytes: bytes, reemplazos: dict) -> bytes:
-    """
-    Reemplaza placeholders en DOCX usando python-docx (seguro, no daña XML).
-    """
-    from docx import Document
-    import io
-
-    doc = Document(io.BytesIO(plantilla_bytes))
-
-    # Reemplazar en párrafos
-    for paragraph in doc.paragraphs:
-        for run in paragraph.runs:
-            for marcador, valor in reemplazos.items():
-                if marcador in run.text:
-                    run.text = run.text.replace(marcador, str(valor) if valor else marcador)
-
-    # Reemplazar en tablas
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for paragraph in cell.paragraphs:
-                    for run in paragraph.runs:
-                        for marcador, valor in reemplazos.items():
-                            if marcador in run.text:
-                                run.text = run.text.replace(marcador, str(valor) if valor else marcador)
-
-    # Guardar a bytes
-    output = io.BytesIO()
-    doc.save(output)
-    output.seek(0)
-    return output.getvalue()
-
 
 class GenerarPlantillaRequest(BaseModel):
     modelo: str
@@ -1012,59 +980,76 @@ def generar_plantilla_con_concepto(
     db: Session = Depends(get_db),
 ):
     """
-    Genera un documento ODT desde la plantilla principal reemplazando placeholders
-    con el concepto técnico proporcionado en el request.
+    Genera un documento DOCX desde la plantilla principal usando procesamiento
+    robusto por-párrafo (reemplaza sobre XML crudo, no python-docx run-by-run).
     """
     import os
+    import zipfile
     from datetime import datetime
+    from io import BytesIO
+    from services.word_generator import _procesar_xml_docx, _escape_xml
 
-    # DEBUG: Log de lo que se recibe
-    print(f"DEBUG: Concepto texto length: {len(req.concepto_texto)}")
-    print(f"DEBUG: Concepto primeros 100 chars: {req.concepto_texto[:100]}")
-    print(f"DEBUG: Accionante: {req.accionante}")
-    print(f"DEBUG: Radicado: {req.radicado}")
-
-    # 2. Cargar plantilla principal
     plantilla_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "plantillas", "MODELO_PRINCIPAL.docx")
 
     if not os.path.exists(plantilla_path):
-        raise HTTPException(status_code=500, detail=f"Plantilla no encontrada")
+        raise HTTPException(status_code=500, detail="Plantilla no encontrada")
 
     try:
         with open(plantilla_path, 'rb') as f:
-            plantilla_contenido = f.read()
+            plantilla_bytes = f.read()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error leyendo plantilla: {str(e)}")
 
-    # 3. Preparar reemplazos
+    # Preparar reemplazos
     fecha_hoy = datetime.now().strftime("%d de %B de %Y").replace(
         "January", "enero").replace("February", "febrero").replace("March", "marzo").replace(
         "April", "abril").replace("May", "mayo").replace("June", "junio").replace(
         "July", "julio").replace("August", "agosto").replace("September", "septiembre").replace(
         "October", "octubre").replace("November", "noviembre").replace("December", "diciembre")
 
-    reemplazos = {
+    rep_legal_cc = f"{req.representante_legal} {req.cedula_representante}".strip() if req.cedula_representante else req.representante_legal
+
+    mapa = {
         "[CONCEPTO TECNICO]": req.concepto_texto,
         "[ACCIONANTE]": req.accionante,
         "[RADICADO]": req.radicado,
+        "[RADICADO TUTELA]": req.radicado,
+        "[RADICADO DE SALIDA]": req.radicado,
         "[JUZGADO]": req.juzgado,
+        "[JUZGADO ]": req.juzgado,
         "[REPRESENTANTE_LEGAL]": req.representante_legal,
+        "[REPRESENTANTE LEGAL Y CC]": rep_legal_cc,
         "[CEDULA_REPRESENTANTE]": req.cedula_representante,
         "[NUMERO_RS]": "",
         "[FECHA_CONTESTACION]": fecha_hoy,
+        "[FECHA]": fecha_hoy,
     }
 
-    print(f"DEBUG: Reemplazos preparados: {list(reemplazos.keys())}")
-
-    # 4. Reemplazar en el ODT
+    # Procesar DOCX: abrir como ZIP, procesar word/document.xml con _procesar_xml_docx
     try:
-        contenido_modificado = _reemplazar_en_docx(plantilla_contenido, reemplazos)
-        print(f"DEBUG: ODT procesado exitosamente")
-    except Exception as e:
-        print(f"ERROR procesando ODT: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error procesando ODT: {str(e)}")
+        zip_in = BytesIO(plantilla_bytes)
+        zip_out_buf = BytesIO()
 
-    # 5. Retornar documento generado
+        with zipfile.ZipFile(zip_in, "r") as zin:
+            with zipfile.ZipFile(zip_out_buf, "w", zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+
+                    if item.filename == "word/document.xml":
+                        try:
+                            xml_str = data.decode("utf-8")
+                            xml_str, _ = _procesar_xml_docx(xml_str, mapa)
+                            data = xml_str.encode("utf-8")
+                        except Exception:
+                            pass
+
+                    zout.writestr(item, data)
+
+        contenido_modificado = zip_out_buf.getvalue()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error procesando DOCX: {str(e)}")
+
     nombre_archivo = f"Contestacion_{req.modelo}_{req.radicado or 'sin_radicado'}.docx"
 
     return StreamingResponse(
