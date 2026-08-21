@@ -21,7 +21,6 @@ PLANTILLAS_DIR = BASE_DIR / "plantillas"
 CONTESTACIONES_DIR = BASE_DIR / "contestaciones"
 
 NOMBRE_PLANTILLA = {
-    "Modelo Principal":              "MODELO_PRINCIPAL.docx",
     "Transporte":                    "Transporte.docx",
     "Medicamento Importado":         "Medicamento_Importado.docx",
     "No INVIMA":                     "No_INVIMA_2025.docx",
@@ -196,11 +195,7 @@ def generar_documento(datos: dict) -> tuple[str, str, int]:
     Retorna (nombre_archivo, ruta_completa, total_reemplazos).
     """
     tipo_modelo = datos.get("tipo_modelo", "")
-    # TEMPORAL: Usar Medicamento_Importado.docx para prueba
-    if tipo_modelo == "Modelo Principal":
-        nombre_plantilla = "Medicamento_Importado.docx"
-    else:
-        nombre_plantilla = NOMBRE_PLANTILLA.get(tipo_modelo)
+    nombre_plantilla = NOMBRE_PLANTILLA.get(tipo_modelo)
     if not nombre_plantilla:
         raise ValueError(f"Tipo de modelo no reconocido: '{tipo_modelo}'")
 
@@ -239,8 +234,7 @@ def generar_documento(datos: dict) -> tuple[str, str, int]:
     accionante = re.sub(r"\s+", "_", (datos.get("accionante", "SIN") or "SIN").upper())[:20]
     accionante = re.sub(r"[^A-Za-z0-9_]", "", accionante)
     fecha_hoy = date.today().strftime("%Y%m%d")
-    # FORZAR: Generar SIEMPRE como .docx (NUNCA .odt)
-    nombre_archivo = f"Contestacion_{rs}_{accionante}_{fecha_hoy}_DOCX.docx"
+    nombre_archivo = f"Contestacion_{rs}_{accionante}_{fecha_hoy}.docx"
 
     CONTESTACIONES_DIR.mkdir(parents=True, exist_ok=True)
     ruta_salida = CONTESTACIONES_DIR / nombre_archivo
