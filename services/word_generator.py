@@ -15,12 +15,48 @@ import zipfile
 from datetime import date
 from io import BytesIO
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PLANTILLAS_DIR = BASE_DIR / "plantillas"
 CONTESTACIONES_DIR = BASE_DIR / "contestaciones"
+CONCEPTOS_DIR = BASE_DIR / "conceptos"
 
 NOMBRE_PLANTILLA = "MODELO_PRINCIPAL.odt"
+
+# ─────────────────────────────────────────────
+# Extractor de conceptos
+# ─────────────────────────────────────────────
+
+def _extraer_texto_docx(ruta_docx: Path) -> str:
+    """Extrae todo el texto de un archivo .docx."""
+    try:
+        with zipfile.ZipFile(ruta_docx, 'r') as z:
+            xml_content = z.read('word/document.xml')
+        root = ET.fromstring(xml_content)
+        ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+        textos = []
+        for t in root.findall('.//w:t', ns):
+            if t.text:
+                textos.append(t.text)
+        return "".join(textos)
+    except Exception as e:
+        return ""
+
+
+def cargar_concepto(nombre_concepto: str) -> str:
+    """Carga el texto de un concepto desde los archivos en conceptos/."""
+    archivo = CONCEPTOS_DIR / f"{nombre_concepto}.docx"
+    if not archivo.exists():
+        # Buscar si existe con variaciones
+        for f in CONCEPTOS_DIR.glob("*.docx"):
+            if f.stem.lower() == nombre_concepto.lower():
+                archivo = f
+                break
+        else:
+            return ""
+    return _extraer_texto_docx(archivo)
+
 
 # ─────────────────────────────────────────────
 # Helpers XML
@@ -130,6 +166,14 @@ def _insertar_advertencia(xml_str: str) -> str:
 
 def _construir_mapa(datos: dict) -> dict:
     d = datos.get
+
+    # Si hay un concepto_nombre, cargar el concepto desde archivo
+    concepto_nombre = d("concepto_nombre", "")
+    if concepto_nombre:
+        concepto_texto = cargar_concepto(concepto_nombre)
+    else:
+        concepto_texto = d("concepto_texto", "")
+
     return {
         "[FECHA_CONTESTACION]":      d("fecha_contestacion", ""),
         "[NUMERO_RS]":               d("numero_rs", ""),
@@ -155,6 +199,7 @@ def _construir_mapa(datos: dict) -> dict:
         "[SOLICITUD_FINAL]":         d("solicitud_al_juez", ""),
         "[DIAGNOSTICO]":             d("diagnostico", ""),
         "[OBSERVACIONES]":           d("observaciones", ""),
+        "[CONCEPTO TECNICO]":        concepto_texto,
         # Transporte
         "[ORIGEN]":                  d("origen", ""),
         "[DESTINO]":                 d("destino", ""),
