@@ -105,9 +105,16 @@ async def descargar(nombre_archivo: str):
     ruta = CONTESTACIONES_DIR / nombre_archivo
     if not ruta.exists():
         raise HTTPException(status_code=404, detail="Archivo no encontrado.")
+
+    # Detectar media_type basado en extensión
+    if nombre_archivo.endswith(".odt"):
+        media_type = "application/vnd.oasis.opendocument.text"
+    else:
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
     return FileResponse(
         path=str(ruta),
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        media_type=media_type,
         filename=nombre_archivo,
     )
 

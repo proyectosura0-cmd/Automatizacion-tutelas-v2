@@ -21,7 +21,7 @@ PLANTILLAS_DIR = BASE_DIR / "plantillas"
 CONTESTACIONES_DIR = BASE_DIR / "contestaciones"
 
 NOMBRE_PLANTILLA = {
-    "Transporte":                    "Transporte.docx",
+    "Transporte":                    "Transporte.odt",
     "Medicamento Importado":         "Medicamento_Importado.docx",
     "No INVIMA":                     "No_INVIMA_2025.docx",
     "No PBS / Presupuestos Maximos": "NO_PBS_Presup_Max.docx",
@@ -42,29 +42,21 @@ def _escape_xml(s: str) -> str:
         .replace("'", "&apos;"))
 
 
-def _procesar_xml(xml_str: str, mapa: dict) -> tuple[str, int]:
-    """
-    Recorre cada <w:p> del XML, concatena el texto de sus <w:t>,
-    reemplaza marcadores y reconstruye poniendo todo en el primer <w:t>.
-    """
+def _procesar_xml_docx(xml_str: str, mapa: dict) -> tuple[str, int]:
+    """Procesa XML de DOCX."""
     total = 0
 
     def procesar_parrafo(m: re.Match) -> str:
         nonlocal total
         p_xml = m.group(0)
-
-        # Extraer todo el texto de los <w:t>...</w:t> dentro del párrafo
         t_matches = list(re.finditer(r'<w:t(?:\s[^>]*)?>([^<]*)</w:t>', p_xml))
         if not t_matches:
             return p_xml
 
         texto_completo = "".join(tm.group(1) for tm in t_matches)
-
-        # Verificar si hay algún marcador presente (puede estar fragmentado)
         if not any(k in texto_completo for k in mapa):
             return p_xml
 
-        # Realizar los reemplazos
         texto_final = texto_completo
         n = 0
         for marcador, valor in mapa.items():
@@ -76,12 +68,9 @@ def _procesar_xml(xml_str: str, mapa: dict) -> tuple[str, int]:
 
         if n == 0:
             return p_xml
-
         total += n
 
-        # Poner todo el texto en el primer <w:t>, vaciar el resto
         first = [True]
-
         def replace_wt(mt: re.Match) -> str:
             if first[0]:
                 first[0] = False
@@ -96,8 +85,29 @@ def _procesar_xml(xml_str: str, mapa: dict) -> tuple[str, int]:
         xml_str,
         flags=re.DOTALL,
     )
+    return xml_str, total
+
+
+def _procesar_xml_odf(xml_str: str, mapa: dict) -> tuple[str, int]:
+    """Procesa XML de ODF (.odt)."""
+    total = 0
+
+    for marcador, valor in mapa.items():
+        if marcador in xml_str:
+            repl = _escape_xml(str(valor)) if valor else _escape_xml(marcador)
+            count = xml_str.count(marcador)
+            xml_str = xml_str.replace(marcador, repl)
+            total += count
 
     return xml_str, total
+
+
+def _procesar_xml(xml_str: str, mapa: dict, es_odf: bool = False) -> tuple[str, int]:
+    """Procesa XML detectando automáticamente formato."""
+    if es_odf or '<text:p' in xml_str:
+        return _procesar_xml_odf(xml_str, mapa)
+    else:
+        return _procesar_xml_docx(xml_str, mapa)
 
 
 def _insertar_advertencia(xml_str: str) -> str:
@@ -191,7 +201,7 @@ def _construir_mapa(datos: dict) -> dict:
 
 def generar_documento(datos: dict) -> tuple[str, str, int]:
     """
-    Genera el .docx de contestación.
+    Genera el .odt o .docx de contestación.
     Retorna (nombre_archivo, ruta_completa, total_reemplazos).
     """
     tipo_modelo = datos.get("tipo_modelo", "")
@@ -206,6 +216,7 @@ def generar_documento(datos: dict) -> tuple[str, str, int]:
             "Súbala desde la pestaña Plantillas de la interfaz."
         )
 
+    es_odf = nombre_plantilla.endswith(".odt")
     mapa = _construir_mapa(datos)
     zip_in = BytesIO(ruta_plantilla.read_bytes())
     zip_out_buf = BytesIO()
@@ -219,13 +230,13 @@ def generar_documento(datos: dict) -> tuple[str, str, int]:
                 if item.filename.endswith(".xml"):
                     try:
                         xml_str = data.decode("utf-8")
-                        xml_str, n = _procesar_xml(xml_str, mapa)
+                        xml_str, n = _procesar_xml(xml_str, mapa, es_odf=es_odf)
                         total_reemplazos += n
-                        if item.filename == "word/document.xml":
+                        if not es_odf and item.filename == "word/document.xml":
                             xml_str = _insertar_advertencia(xml_str)
                         data = xml_str.encode("utf-8")
                     except Exception:
-                        pass  # si falla el XML, conservar bytes originales
+                        pass
 
                 zout.writestr(item, data)
 
@@ -234,7 +245,8 @@ def generar_documento(datos: dict) -> tuple[str, str, int]:
     accionante = re.sub(r"\s+", "_", (datos.get("accionante", "SIN") or "SIN").upper())[:20]
     accionante = re.sub(r"[^A-Za-z0-9_]", "", accionante)
     fecha_hoy = date.today().strftime("%Y%m%d")
-    nombre_archivo = f"Contestacion_{rs}_{accionante}_{fecha_hoy}.docx"
+    ext = "odt" if es_odf else "docx"
+    nombre_archivo = f"Contestacion_{rs}_{accionante}_{fecha_hoy}.{ext}"
 
     CONTESTACIONES_DIR.mkdir(parents=True, exist_ok=True)
     ruta_salida = CONTESTACIONES_DIR / nombre_archivo
